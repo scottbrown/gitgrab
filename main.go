@@ -9,6 +9,8 @@ import (
     "os/exec"
     "path/filepath"
     "strings"
+
+    "github.com/spf13/cobra"
 )
 
 type Repository struct {
@@ -77,7 +79,7 @@ func (gc *GitHubClient) fetchAllRepos(orgName string) ([]Repository, error) {
     return allRepos, nil
 }
 
-func cloneRepo(repo Repository, targetDir, token string) error {
+func cloneRepo(repo Repository, targetDir, token, orgName string) error {
     repoPath := filepath.Join(targetDir, repo.Name)
     
     // Check if directory already exists
@@ -89,7 +91,7 @@ func cloneRepo(repo Repository, targetDir, token string) error {
     // Prepare clone URL with authentication
     var cloneURL string
     if repo.Private {
-        cloneURL = fmt.Sprintf("https://%s@github.com/kohofinancial/%s.git", token, repo.Name)
+        cloneURL = fmt.Sprintf("https://%s@github.com/%s/%s.git", token, orgName, repo.Name)
     } else {
         cloneURL = repo.CloneURL
     }
@@ -106,66 +108,81 @@ func cloneRepo(repo Repository, targetDir, token string) error {
     return nil
 }
 
-func main() {
-    if len(os.Args) != 2 {
-        fmt.Fprintf(os.Stderr, "Usage: %s <target_directory>\n", os.Args[0])
-        fmt.Fprintf(os.Stderr, "Example: %s ./repositories\n", os.Args[0])
-        os.Exit(1)
-    }
+var (
+    orgName string
+)
 
-    targetDir := os.Args[1]
-    token := os.Getenv("GITHUB_TOKEN")
-    
-    if token == "" {
-        fmt.Fprintf(os.Stderr, "Error: GITHUB_TOKEN environment variable is required\n")
-        os.Exit(1)
-    }
-
-    // Check if git is available
-    if _, err := exec.LookPath("git"); err != nil {
-        fmt.Fprintf(os.Stderr, "Error: git is not installed or not in PATH\n")
-        os.Exit(1)
-    }
-
-    // Create target directory if it doesn't exist
-    if err := os.MkdirAll(targetDir, 0755); err != nil {
-        fmt.Fprintf(os.Stderr, "Error creating directory %s: %v\n", targetDir, err)
-        os.Exit(1)
-    }
-
-    fmt.Printf("Fetching repositories for kohofinancial organization...\n")
-    fmt.Printf("Target directory: %s\n", targetDir)
-    fmt.Println(strings.Repeat("-", 50))
-
-    client := NewGitHubClient(token)
-    repos, err := client.fetchAllRepos("kohofinancial")
-    if err != nil {
-        fmt.Fprintf(os.Stderr, "Error fetching repositories: %v\n", err)
-        os.Exit(1)
-    }
-
-    if len(repos) == 0 {
-        fmt.Println("No repositories found for kohofinancial organization")
-        return
-    }
-
-    fmt.Printf("Found %d repositories\n\n", len(repos))
-
-    successCount := 0
-    failureCount := 0
-
-    for i, repo := range repos {
-        fmt.Printf("[%d/%d] Cloning %s...\n", i+1, len(repos), repo.Name)
+var rootCmd = &cobra.Command{
+    Use:   "gitgrab [target_directory]",
+    Short: "Clone all repositories from a GitHub organization",
+    Long:  "GitGrab is a CLI utility that clones all GitHub repositories from a specified organization to a local directory.",
+    Args:  cobra.ExactArgs(1),
+    Run: func(cmd *cobra.Command, args []string) {
+        targetDir := args[0]
+        token := os.Getenv("GITHUB_TOKEN")
         
-        if err := cloneRepo(repo, targetDir, token); err != nil {
-            fmt.Printf("  ✗ %v\n", err)
-            failureCount++
-        } else {
-            fmt.Printf("  ✓ Successfully cloned %s\n", repo.Name)
-            successCount++
+        if token == "" {
+            fmt.Fprintf(os.Stderr, "Error: GITHUB_TOKEN environment variable is required\n")
+            os.Exit(1)
         }
-    }
 
-    fmt.Println(strings.Repeat("-", 50))
-    fmt.Printf("Completed! Success: %d, Failed: %d\n", successCount, failureCount)
+        // Check if git is available
+        if _, err := exec.LookPath("git"); err != nil {
+            fmt.Fprintf(os.Stderr, "Error: git is not installed or not in PATH\n")
+            os.Exit(1)
+        }
+
+        // Create target directory if it doesn't exist
+        if err := os.MkdirAll(targetDir, 0755); err != nil {
+            fmt.Fprintf(os.Stderr, "Error creating directory %s: %v\n", targetDir, err)
+            os.Exit(1)
+        }
+
+        fmt.Printf("Fetching repositories for %s organization...\n", orgName)
+        fmt.Printf("Target directory: %s\n", targetDir)
+        fmt.Println(strings.Repeat("-", 50))
+
+        client := NewGitHubClient(token)
+        repos, err := client.fetchAllRepos(orgName)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error fetching repositories: %v\n", err)
+            os.Exit(1)
+        }
+
+        if len(repos) == 0 {
+            fmt.Printf("No repositories found for %s organization\n", orgName)
+            return
+        }
+
+        fmt.Printf("Found %d repositories\n\n", len(repos))
+
+        successCount := 0
+        failureCount := 0
+
+        for i, repo := range repos {
+            fmt.Printf("[%d/%d] Cloning %s...\n", i+1, len(repos), repo.Name)
+            
+            if err := cloneRepo(repo, targetDir, token, orgName); err != nil {
+                fmt.Printf("  ✗ %v\n", err)
+                failureCount++
+            } else {
+                fmt.Printf("  ✓ Successfully cloned %s\n", repo.Name)
+                successCount++
+            }
+        }
+
+        fmt.Println(strings.Repeat("-", 50))
+        fmt.Printf("Completed! Success: %d, Failed: %d\n", successCount, failureCount)
+    },
+}
+
+func init() {
+    rootCmd.Flags().StringVarP(&orgName, "org", "o", "kohofinancial", "GitHub organization name")
+}
+
+func main() {
+    if err := rootCmd.Execute(); err != nil {
+        fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+        os.Exit(1)
+    }
 }
