@@ -9,44 +9,52 @@ This is `gitgrab`, a CLI utility written in Go that clones all GitHub repositori
 ## Architecture
 
 - **Single binary**: The entire application is contained in `main.go`
+- **CLI framework**: Uses spf13/cobra for command-line argument parsing and flag handling
 - **Core components**:
-  - `Repository` struct: Represents GitHub repository metadata
-  - `GitHubClient` struct: Handles GitHub API interactions with authentication
-  - `fetchAllRepos()`: Paginates through GitHub API to get all org repositories
-  - `cloneRepo()`: Performs git clone operations with authentication handling
+  - `Repository` struct: Represents GitHub repository metadata from API responses
+  - `GitHubClient` struct: Handles GitHub API interactions with token-based authentication
+  - `fetchAllRepos()`: Paginates through GitHub API to get all organization repositories
+  - `cloneRepo()`: Performs git clone operations with proper authentication handling for both public and private repos
+  - `rootCmd`: Cobra command that defines CLI interface with `-o/--org` flag and positional directory argument
 
 ## Development Commands
 
-**Build the application:**
+**Build the application (preferred method):**
 ```bash
-go build -o gitgrab main.go
+task build
+```
+
+**Alternative build:**
+```bash
+go build -o .build/gitgrab github.com/scottbrown/gitgrab
 ```
 
 **Run the application:**
 ```bash
-GITHUB_TOKEN=<your_token> ./gitgrab <target_directory>
-```
-
-**Run tests (if any exist):**
-```bash
-go test ./...
+GITHUB_TOKEN=<your_token> ./.build/gitgrab -o <organization> <target_directory>
 ```
 
 **Format code:**
 ```bash
-go fmt ./...
+task fmt
 ```
 
-**Check for issues:**
+**Run tests:**
 ```bash
-go vet ./...
+task test
+```
+
+**Clean build artifacts:**
+```bash
+task clean
 ```
 
 ## Key Implementation Details
 
-- The application is hardcoded to clone from "kohofinancial" organization
+- Organization name is required via `-o/--org` flag
 - Handles both public and private repositories with token-based authentication
 - Uses pagination to fetch all repositories (100 per page)
 - Skips existing directories to avoid re-cloning
 - Suppresses git clone output for cleaner console display
 - Requires `GITHUB_TOKEN` environment variable and `git` binary in PATH
+- Authentication URLs are dynamically constructed based on the specified organization
