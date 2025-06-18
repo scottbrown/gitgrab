@@ -177,7 +177,8 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-    rootCmd.Flags().StringVarP(&orgName, "org", "o", "kohofinancial", "GitHub organization name")
+    rootCmd.Flags().StringVarP(&orgName, "org", "o", "", "GitHub organization name")
+    rootCmd.MarkFlagRequired("org")
 }
 
 func main() {
