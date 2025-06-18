@@ -1,0 +1,23 @@
+---
+version: 3
+
+tasks:
+  build:
+    desc: "Builds a local binary"
+    cmds:
+      - go build -o .build/gitgrab github.com/scottbrown/gitgrab
+
+  clean:
+    desc: "Removes all temporary files and directories"
+    cmds:
+      - rm -rf .build
+
+  fmt:
+    desc: "Formats the code"
+    cmds:
+      - go fmt ./...
+
+  test:
+    desc: "Runs unit tests"
+    cmds:
+      - go test ./...
