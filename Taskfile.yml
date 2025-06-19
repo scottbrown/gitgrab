@@ -5,7 +5,7 @@ tasks:
   build:
     desc: "Builds a local binary"
     cmds:
-      - go build -o .build/gitgrab github.com/scottbrown/gitgrab
+      - go build -o .build/gitgrab ./cmd/gitgrab
 
   clean:
     desc: "Removes all temporary files and directories"
@@ -21,3 +21,8 @@ tasks:
     desc: "Runs unit tests"
     cmds:
       - go test ./...
+
+  coverage:
+    desc: "Prints the current test coverage"
+    cmds:
+      - go test ./... -cover
