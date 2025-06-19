@@ -45,8 +45,18 @@ var rootCmd = &cobra.Command{
 		fmt.Printf("Target directory: %s\n", targetDir)
 		fmt.Println(strings.Repeat("-", 50))
 
-		client := gitgrab.NewGitHubClient(token)
-		repos, err := client.FetchAllRepos(orgName)
+		// Parse clone method
+		method, err := gitgrab.ParseCloneMethod(cloneMethod)
+		if err != nil {
+			fmt.Printf("Warning: %v\n", err)
+		}
+
+		// Create typed values
+		githubToken := gitgrab.GitHubToken(token)
+		organization := gitgrab.OrganizationName(orgName)
+
+		client := gitgrab.NewGitHubClient(githubToken)
+		repos, err := client.FetchAllRepos(organization)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error fetching repositories: %v\n", err)
 			os.Exit(1)
@@ -65,7 +75,15 @@ var rootCmd = &cobra.Command{
 		for i, repo := range repos {
 			fmt.Printf("[%d/%d] Cloning %s...\n", i+1, len(repos), repo.Name)
 			
-			if err := gitgrab.CloneRepo(repo, targetDir, token, orgName, cloneMethod); err != nil {
+			config := gitgrab.CloneConfig{
+				Repository:   repo,
+				TargetDir:    targetDir,
+				Token:        githubToken,
+				Organization: organization,
+				Method:       method,
+			}
+			
+			if err := gitgrab.CloneRepo(config); err != nil {
 				fmt.Printf("  ✗ %v\n", err)
 				failureCount++
 			} else {
