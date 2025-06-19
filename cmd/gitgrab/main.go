@@ -20,6 +20,7 @@ var rootCmd = &cobra.Command{
 	Short: "Clone all repositories from a GitHub organization",
 	Long:  "GitGrab is a CLI utility that clones all GitHub repositories from a specified organization to a local directory.",
 	Args:  cobra.ExactArgs(1),
+  Version: gitgrab.Version(),
 	Run: func(cmd *cobra.Command, args []string) {
 		targetDir := args[0]
 		token := os.Getenv("GITHUB_TOKEN")

@@ -1,16 +1,45 @@
 ---
 version: 3
 
+vars:
+  BINARY_NAME: gitgrab
+  REPO: github.com/scottbrown/{{.BINARY_NAME}}
+  BUILD_DIR: .build
+  DIST_DIR: .dist
+  TEST_DIR: .test
+  VERSION:
+    sh: |
+      if [ -n "$GITHUB_REF" ] && [[ "$GITHUB_REF" == refs/tags/* ]]; then
+        echo "${GITHUB_REF#refs/tags/}"
+      else
+        git rev-parse --abbrev-ref HEAD || echo "main"
+      fi
+  BUILD:
+    sh: git rev-parse --short HEAD || echo "unknown"
+  BUILD_FLAGS: "-X {{.REPO}}.version={{.VERSION}} -X {{.REPO}}.build={{.BUILD}}"
+
 tasks:
+  setup:
+    internal: true
+    run: once
+    cmds:
+      - mkdir -p {{.BUILD_DIR}}
+      - mkdir -p {{.DIST_DIR}}
+      - mkdir -p {{.TEST_DIR}}
+
   build:
     desc: "Builds a local binary"
     cmds:
-      - go build -o .build/gitgrab ./cmd/gitgrab
+      - go build -ldflags "{{.BUILD_FLAGS}}" -o {{.BUILD_DIR}}/{{.BINARY_NAME}} {{.REPO}}/cmd/{{.BINARY_NAME}}
+    sources:
+      - '**/*.go'
+    generates:
+      - '{{.BUILD_DIR}}/{{.BINARY_NAME}}'
 
   clean:
     desc: "Removes all temporary files and directories"
     cmds:
-      - rm -rf .build
+      - rm -rf {{.BUILD_DIR}} {{.DIST_DIR}} {{.TEST_DIR}}
 
   fmt:
     desc: "Formats the code"
@@ -20,12 +49,32 @@ tasks:
   test:
     desc: "Runs unit tests"
     cmds:
-      - go test ./...
+      - go test -v ./... -outputdir={{.TEST_DIR}}
 
   coverage:
     desc: "Prints the current test coverage"
     cmds:
       - go test ./... -cover
+
+  check:
+    desc: "Run all security scans"
+    deps: [ sast, vet, vuln ]
+
+  sast:
+    desc: "Scans for code vulns"
+    cmds:
+      - gosec ./...
+
+  vet:
+    desc: Lint Go code
+    cmds:
+      - go vet ./...
+
+  vuln:
+    desc: "Scans for 3rd party lib vulns"
+    cmds:
+      - govulncheck ./...
+
 
   release:
     desc: Build release artifacts for multiple platforms
