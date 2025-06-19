@@ -82,7 +82,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.Flags().StringVarP(&orgName, "org", "o", "", "GitHub organization name")
 	rootCmd.MarkFlagRequired("org")
-	rootCmd.Flags().StringVarP(&cloneMethod, "method", "m", "ssh", "Clone method for private repositories: 'ssh' or 'http' (default: ssh)")
+	rootCmd.Flags().StringVarP(&cloneMethod, "method", "m", "ssh", "Clone method for repositories: 'ssh' or 'http' (default: ssh)")
 }
 
 func main() {

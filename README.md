@@ -12,30 +12,30 @@ GitGrab fetches all repositories (both public and private) from a specified GitH
 # Set your GitHub token
 export GITHUB_TOKEN=your_github_token_here
 
-# Clone all repositories from an organization (uses SSH for private repos by default)
+# Clone all repositories from an organization (uses SSH by default)
 gitgrab -o myorg ./repositories
 
-# Use HTTP method for private repositories instead of SSH
+# Use HTTP method for all repositories instead of SSH
 gitgrab -o myorg -m http ./repositories
 
-# Explicitly use SSH method for private repositories
+# Explicitly use SSH method for all repositories
 gitgrab -o myorg -m ssh ./repositories
 ```
 
 ## Clone Methods
 
-GitGrab supports two clone methods for private repositories:
+GitGrab supports two clone methods for all repositories:
 
 - **SSH (default)**: Uses `git@github.com:org/repo.git` format
   - Requires SSH key setup with GitHub
   - More secure and doesn't expose tokens in process lists
   - Recommended for most use cases
+  - Works for both public and private repositories
 
-- **HTTP**: Uses `https://token@github.com/org/repo.git` format
-  - Uses your GitHub token for authentication
+- **HTTP**: Uses different URLs based on repository privacy:
+  - **Private repositories**: `https://token@github.com/org/repo.git` (uses your GitHub token)
+  - **Public repositories**: `https://github.com/org/repo.git` (standard HTTPS clone URL)
   - Fallback option if SSH keys aren't configured
-
-Public repositories always use the standard HTTPS clone URL regardless of the method flag.
 
 ## Compile from source
 

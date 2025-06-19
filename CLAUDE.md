@@ -77,11 +77,12 @@ task clean
 - Organization name is required via `-o/--org` flag
 - Clone method can be specified via `-m/--method` flag (`ssh` or `http`, defaults to `ssh`)
 - Handles both public and private repositories with configurable authentication:
-  - **Private repos with SSH method (default)**: Uses `ssh_url` from GitHub API (`git@github.com:org/repo.git`)
-  - **Private repos with HTTP method**: Uses token-based authentication (`https://token@github.com/org/repo.git`)
-  - **Public repos**: Always uses `clone_url` from GitHub API regardless of method flag
+  - **SSH method (default)**: Uses `ssh_url` from GitHub API (`git@github.com:org/repo.git`) for all repositories
+  - **HTTP method**: 
+    - Private repos: Uses token-based authentication (`https://token@github.com/org/repo.git`)
+    - Public repos: Uses `clone_url` from GitHub API (`https://github.com/org/repo.git`)
 - Uses pagination to fetch all repositories (100 per page)
 - Skips existing directories to avoid re-cloning
 - Suppresses git clone output for cleaner console display
 - Requires `GITHUB_TOKEN` environment variable and `git` binary in PATH
-- For SSH method, requires SSH key setup with GitHub for private repository access
+- For SSH method, requires SSH key setup with GitHub for repository access

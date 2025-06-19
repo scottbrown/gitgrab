@@ -97,16 +97,16 @@ func CloneRepo(repo Repository, targetDir, token, orgName, cloneMethod string) e
 		return nil
 	}
 
-	// Prepare clone URL based on repository privacy and clone method
+	// Prepare clone URL based on clone method
 	var cloneURL string
-	if repo.Private {
-		if cloneMethod == "ssh" {
-			cloneURL = repo.SSHURL
-		} else {
-			cloneURL = fmt.Sprintf("https://%s@github.com/%s/%s.git", token, orgName, repo.Name)
-		}
+	if cloneMethod == "ssh" {
+		cloneURL = repo.SSHURL
 	} else {
-		cloneURL = repo.CloneURL
+		if repo.Private {
+			cloneURL = fmt.Sprintf("https://%s@github.com/%s/%s.git", token, orgName, repo.Name)
+		} else {
+			cloneURL = repo.CloneURL
+		}
 	}
 
 	// Execute git clone
