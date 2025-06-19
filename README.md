@@ -4,7 +4,15 @@ A CLI utility to clone all GitHub repositories from an organization in one comma
 
 ## What it does
 
-GitGrab fetches all repositories (both public and private) from a specified GitHub organization and clones them to a local directory. It handles authentication automatically and provides progress feedback during the cloning process.
+GitGrab fetches all repositories (both public and private) from a specified GitHub organization and clones them to a local directory. For repositories that already exist locally, it automatically updates them:
+
+- **New repositories**: Clones the repository using the specified method (SSH or HTTP)
+- **Existing repositories**: 
+  - If on the default branch (main, master, etc.): Performs `git pull` to get latest changes
+  - If on any other branch: Performs `git fetch` to update remote tracking branches
+  - Fallback: If branch detection fails, performs `git fetch`
+
+It handles authentication automatically and provides progress feedback during the cloning and updating process.
 
 ## Usage
 
