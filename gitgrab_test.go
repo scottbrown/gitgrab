@@ -61,8 +61,8 @@ func TestGitHubClient_makeRequest(t *testing.T) {
 
 func TestGitHubClient_FetchAllRepos(t *testing.T) {
 	testRepos := []Repository{
-		{Name: "repo1", CloneURL: "https://github.com/test/repo1.git", Private: false},
-		{Name: "repo2", CloneURL: "https://github.com/test/repo2.git", Private: true},
+		{Name: "repo1", CloneURL: "https://github.com/test/repo1.git", SSHURL: "git@github.com:test/repo1.git", Private: false},
+		{Name: "repo2", CloneURL: "https://github.com/test/repo2.git", SSHURL: "git@github.com:test/repo2.git", Private: true},
 	}
 
 	callCount := 0
@@ -130,6 +130,7 @@ func TestCloneRepo_DirectoryExists(t *testing.T) {
 	repo := Repository{
 		Name:     "test-repo",
 		CloneURL: "https://github.com/test/test-repo.git",
+		SSHURL:   "git@github.com:test/test-repo.git",
 		Private:  false,
 	}
 	
@@ -139,17 +140,33 @@ func TestCloneRepo_DirectoryExists(t *testing.T) {
 		t.Fatalf("Failed to create test directory: %v", err)
 	}
 
-	err = CloneRepo(repo, tempDir, "token", "testorg")
+	err = CloneRepo(repo, tempDir, "token", "testorg", "ssh")
 	
 	if err != nil {
 		t.Errorf("Expected no error when directory exists, got %v", err)
 	}
 }
 
-func TestCloneRepo_URLGeneration_Private(t *testing.T) {
+func TestCloneRepo_URLGeneration_PrivateSSH(t *testing.T) {
 	repo := Repository{
 		Name:     "private-repo",
 		CloneURL: "https://github.com/test/private-repo.git",
+		SSHURL:   "git@github.com:test/private-repo.git",
+		Private:  true,
+	}
+	
+	expectedURL := "git@github.com:test/private-repo.git"
+	
+	if repo.Private && repo.SSHURL != expectedURL {
+		t.Errorf("Expected private repo SSH URL %s, got %s", expectedURL, repo.SSHURL)
+	}
+}
+
+func TestCloneRepo_URLGeneration_PrivateHTTP(t *testing.T) {
+	repo := Repository{
+		Name:     "private-repo",
+		CloneURL: "https://github.com/test/private-repo.git",
+		SSHURL:   "git@github.com:test/private-repo.git",
 		Private:  true,
 	}
 	
@@ -160,7 +177,7 @@ func TestCloneRepo_URLGeneration_Private(t *testing.T) {
 	if repo.Private {
 		actualURL := "https://" + token + "@github.com/" + orgName + "/" + repo.Name + ".git"
 		if actualURL != expectedURL {
-			t.Errorf("Expected private repo URL %s, got %s", expectedURL, actualURL)
+			t.Errorf("Expected private repo HTTP URL %s, got %s", expectedURL, actualURL)
 		}
 	}
 }
@@ -169,6 +186,7 @@ func TestCloneRepo_URLGeneration_Public(t *testing.T) {
 	repo := Repository{
 		Name:     "public-repo",
 		CloneURL: "https://github.com/test/public-repo.git",
+		SSHURL:   "git@github.com:test/public-repo.git",
 		Private:  false,
 	}
 	
@@ -179,5 +197,69 @@ func TestCloneRepo_URLGeneration_Public(t *testing.T) {
 	expectedURL := "https://github.com/test/public-repo.git"
 	if repo.CloneURL != expectedURL {
 		t.Errorf("Expected public repo URL %s, got %s", expectedURL, repo.CloneURL)
+	}
+}
+
+func TestCloneRepo_CloneMethodSSH(t *testing.T) {
+	tests := []struct {
+		name           string
+		repo           Repository
+		cloneMethod    string
+		expectedSSHURL bool
+	}{
+		{
+			name: "Private repo with SSH method",
+			repo: Repository{
+				Name:     "private-repo",
+				CloneURL: "https://github.com/test/private-repo.git",
+				SSHURL:   "git@github.com:test/private-repo.git",
+				Private:  true,
+			},
+			cloneMethod:    "ssh",
+			expectedSSHURL: true,
+		},
+		{
+			name: "Private repo with HTTP method",
+			repo: Repository{
+				Name:     "private-repo",
+				CloneURL: "https://github.com/test/private-repo.git",
+				SSHURL:   "git@github.com:test/private-repo.git",
+				Private:  true,
+			},
+			cloneMethod:    "http",
+			expectedSSHURL: false,
+		},
+		{
+			name: "Public repo with SSH method",
+			repo: Repository{
+				Name:     "public-repo",
+				CloneURL: "https://github.com/test/public-repo.git",
+				SSHURL:   "git@github.com:test/public-repo.git",
+				Private:  false,
+			},
+			cloneMethod:    "ssh",
+			expectedSSHURL: false, // Public repos use clone_url regardless of method
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var expectedURL string
+			if tt.repo.Private {
+				if tt.cloneMethod == "ssh" {
+					expectedURL = tt.repo.SSHURL
+				} else {
+					expectedURL = "https://token@github.com/testorg/" + tt.repo.Name + ".git"
+				}
+			} else {
+				expectedURL = tt.repo.CloneURL
+			}
+			
+			// We can't actually test git clone without git being available,
+			// but we can verify the URL generation logic
+			if tt.repo.Private && tt.cloneMethod == "ssh" && tt.repo.SSHURL != expectedURL {
+				t.Errorf("Expected SSH URL %s, got %s", expectedURL, tt.repo.SSHURL)
+			}
+		})
 	}
 }

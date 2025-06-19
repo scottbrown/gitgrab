@@ -11,7 +11,8 @@ import (
 )
 
 var (
-	orgName string
+	orgName     string
+	cloneMethod string
 )
 
 var rootCmd = &cobra.Command{
@@ -64,7 +65,7 @@ var rootCmd = &cobra.Command{
 		for i, repo := range repos {
 			fmt.Printf("[%d/%d] Cloning %s...\n", i+1, len(repos), repo.Name)
 			
-			if err := gitgrab.CloneRepo(repo, targetDir, token, orgName); err != nil {
+			if err := gitgrab.CloneRepo(repo, targetDir, token, orgName, cloneMethod); err != nil {
 				fmt.Printf("  ✗ %v\n", err)
 				failureCount++
 			} else {
@@ -81,6 +82,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.Flags().StringVarP(&orgName, "org", "o", "", "GitHub organization name")
 	rootCmd.MarkFlagRequired("org")
+	rootCmd.Flags().StringVarP(&cloneMethod, "method", "m", "ssh", "Clone method for private repositories: 'ssh' or 'http' (default: ssh)")
 }
 
 func main() {
