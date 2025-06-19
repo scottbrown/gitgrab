@@ -13,11 +13,11 @@ This is `gitgrab`, a CLI utility written in Go that clones all GitHub repositori
 - **CLI framework**: Uses spf13/cobra for command-line argument parsing and flag handling
 - **Dependency injection**: Uses `HTTPClient` interface to enable testing without external API calls
 - **Core components**:
-  - `Repository` struct: Represents GitHub repository metadata from API responses
+  - `Repository` struct: Represents GitHub repository metadata from API responses (includes `CloneURL`, `SSHURL`, and `Private` fields)
   - `GitHubClient` struct: Handles GitHub API interactions with token-based authentication
   - `FetchAllRepos()`: Paginates through GitHub API to get all organization repositories
-  - `CloneRepo()`: Performs git clone operations with proper authentication handling for both public and private repos
-  - `rootCmd`: Cobra command that defines CLI interface with `-o/--org` flag and positional directory argument
+  - `CloneRepo()`: Performs git clone operations with configurable clone method (SSH/HTTP) for private repos
+  - `rootCmd`: Cobra command that defines CLI interface with `-o/--org` and `-m/--method` flags and positional directory argument
 
 ## Testing Strategy
 
@@ -40,7 +40,11 @@ go build -o .build/gitgrab ./cmd/gitgrab
 
 **Run the application:**
 ```bash
+# Default (SSH for private repos)
 GITHUB_TOKEN=<your_token> ./.build/gitgrab -o <organization> <target_directory>
+
+# Force HTTP method for private repos
+GITHUB_TOKEN=<your_token> ./.build/gitgrab -o <organization> -m http <target_directory>
 ```
 
 **Format code:**
@@ -71,9 +75,13 @@ task clean
 ## Key Implementation Details
 
 - Organization name is required via `-o/--org` flag
-- Handles both public and private repositories with token-based authentication
+- Clone method can be specified via `-m/--method` flag (`ssh` or `http`, defaults to `ssh`)
+- Handles both public and private repositories with configurable authentication:
+  - **Private repos with SSH method (default)**: Uses `ssh_url` from GitHub API (`git@github.com:org/repo.git`)
+  - **Private repos with HTTP method**: Uses token-based authentication (`https://token@github.com/org/repo.git`)
+  - **Public repos**: Always uses `clone_url` from GitHub API regardless of method flag
 - Uses pagination to fetch all repositories (100 per page)
 - Skips existing directories to avoid re-cloning
 - Suppresses git clone output for cleaner console display
 - Requires `GITHUB_TOKEN` environment variable and `git` binary in PATH
-- Authentication URLs are dynamically constructed based on the specified organization
+- For SSH method, requires SSH key setup with GitHub for private repository access
