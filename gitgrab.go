@@ -16,15 +16,26 @@ type Repository struct {
 	Private  bool   `json:"private"`
 }
 
+type HTTPClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 type GitHubClient struct {
 	token  string
-	client *http.Client
+	client HTTPClient
 }
 
 func NewGitHubClient(token string) *GitHubClient {
 	return &GitHubClient{
 		token:  token,
 		client: &http.Client{},
+	}
+}
+
+func NewGitHubClientWithHTTPClient(token string, client HTTPClient) *GitHubClient {
+	return &GitHubClient{
+		token:  token,
+		client: client,
 	}
 }
 
