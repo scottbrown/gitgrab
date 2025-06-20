@@ -12,9 +12,11 @@ This is `gitgrab`, a CLI utility written in Go that clones all GitHub repositori
 - **CLI entry point**: Located in `cmd/gitgrab/main.go` following standard Go project layout conventions
 - **CLI framework**: Uses spf13/cobra for command-line argument parsing and flag handling
 - **Dependency injection**: Uses `HTTPClient` interface to enable testing without external API calls
+- **Type safety**: Uses custom types for domain concepts (`GitHubToken`, `OrganizationName`, `RepositoryName`, `BranchName`, `GitURL`, `HTTPURL`, `SSHURL`) with validation methods for better type safety and API clarity
 - **Core components**:
   - `Repository` struct: Represents GitHub repository metadata from API responses (includes `CloneURL`, `SSHURL`, `Private`, and `DefaultBranch` fields)
   - `GitHubClient` struct: Handles GitHub API interactions with token-based authentication
+  - `CloneConfig` struct: Groups all parameters needed for cloning operations
   - `FetchAllRepos()`: Paginates through GitHub API to get all organization repositories
   - `CloneRepo()`: Performs git clone operations with configurable clone method (SSH/HTTP) and automatic updates for existing repositories
   - `getCurrentBranch()`: Gets the current branch of a local git repository
@@ -66,6 +68,14 @@ task coverage
 **Run specific test:**
 ```bash
 go test . -run TestName
+```
+
+**Security and code quality checks:**
+```bash
+task check        # Run all security scans
+task sast         # Static application security testing with gosec
+task vet          # Go code linting
+task vuln         # Check for vulnerabilities in dependencies
 ```
 
 **Clean build artifacts:**
