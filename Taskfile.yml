@@ -135,3 +135,52 @@ tasks:
       - task: build-darwin-arm64
       - task: release-core
         vars: { GOOS: darwin, GOARCH: arm64 }
+
+  build-core:
+    internal: true
+    vars:
+      FLAGS: "-ldflags '{{.BUILD_FLAGS}}'"
+    env:
+      GOOS: "{{.GOOS}}"
+      GOARCH: "{{.GOARCH}}"
+    cmds:
+      - go build {{.FLAGS}} -o {{.BUILD_DIR}}/{{.GOOS}}-{{.GOARCH}}/{{.BINARY_NAME}}{{.FILE_EXT}} {{.REPO}}
+
+  build-darwin-amd64:
+    deps:
+      - task: build-core
+        vars: { GOOS: darwin, GOARCH: amd64 }
+
+  build-darwin-arm64:
+    deps:
+      - task: build-core
+        vars: { GOOS: darwin, GOARCH: arm64 }
+
+  build-linux-amd64:
+    deps:
+      - task: build-core
+        vars: { GOOS: linux, GOARCH: amd64 }
+
+  build-linux-arm64:
+    deps:
+      - task: build-core
+        vars: { GOOS: linux, GOARCH: arm64 }
+
+  build-windows-amd64:
+    deps:
+      - task: build-core
+        vars: { GOOS: windows, GOARCH: amd64, FILE_EXT: ".exe" }
+
+  build-windows-arm64:
+    deps:
+      - task: build-core
+        vars: { GOOS: windows, GOARCH: arm64, FILE_EXT: ".exe" }
+
+  build-all:
+    deps:
+      - build-darwin-amd64
+      - build-darwin-arm64
+      - build-linux-amd64
+      - build-linux-arm64
+      - build-windows-amd64
+      - build-windows-arm64
