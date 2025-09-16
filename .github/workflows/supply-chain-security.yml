@@ -24,7 +24,7 @@ jobs:
       # Scan the SBOM for vulnerabilities using Anchore Grype
       - name: Scan SBOM for vulnerabilities
         id: scan
-        uses: anchore/scan-action@v6
+        uses: anchore/scan-action@v7
         with:
           sbom: "${{ env.ANCHORE_SBOM_ACTION_PRIOR_ARTIFACT }}"
           fail-build: true
