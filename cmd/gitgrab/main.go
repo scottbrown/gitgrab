@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -23,10 +25,9 @@ var rootCmd = &cobra.Command{
   Version: gitgrab.Version(),
 	Run: func(cmd *cobra.Command, args []string) {
 		targetDir := args[0]
-		token := os.Getenv("GITHUB_TOKEN")
-		
-		if token == "" {
-			fmt.Fprintf(os.Stderr, "Error: GITHUB_TOKEN environment variable is required\n")
+		githubToken, err := resolveToken(&http.Client{})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -53,7 +54,6 @@ var rootCmd = &cobra.Command{
 		}
 
 		// Create typed values
-		githubToken := gitgrab.GitHubToken(token)
 		organization := gitgrab.OrganizationName(orgName)
 
 		client := gitgrab.NewGitHubClient(githubToken)
@@ -96,6 +96,40 @@ var rootCmd = &cobra.Command{
 		fmt.Println(strings.Repeat("-", 50))
 		fmt.Printf("Completed! Success: %d, Failed: %d\n", successCount, failureCount)
 	},
+}
+
+// resolveToken determines which authentication method to use and returns a
+// GitHubToken. GitHub App credentials (GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY,
+// GITHUB_APP_INSTALLATION_ID) take precedence over a PAT (GITHUB_TOKEN).
+// If any App variable is set, all three must be present.
+func resolveToken(httpClient gitgrab.HTTPClient) (gitgrab.GitHubToken, error) {
+	appID := os.Getenv("GITHUB_APP_ID")
+	keyPath := os.Getenv("GITHUB_APP_PRIVATE_KEY")
+	installID := os.Getenv("GITHUB_APP_INSTALLATION_ID")
+
+	appVarsSet := appID != "" || keyPath != "" || installID != ""
+	if appVarsSet {
+		if appID == "" || keyPath == "" || installID == "" {
+			return "", errors.New(
+				"incomplete GitHub App credentials: GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_INSTALLATION_ID must all be set",
+			)
+		}
+		creds := gitgrab.GitHubAppCredentials{
+			AppID:          appID,
+			PrivateKeyPath: keyPath,
+			InstallationID: installID,
+		}
+		return gitgrab.GetInstallationToken(creds, httpClient)
+	}
+
+	pat := os.Getenv("GITHUB_TOKEN")
+	if pat != "" {
+		return gitgrab.GitHubToken(pat), nil
+	}
+
+	return "", errors.New(
+		"no GitHub credentials configured: set GITHUB_TOKEN or all three GITHUB_APP_* variables (GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, GITHUB_APP_INSTALLATION_ID)",
+	)
 }
 
 func init() {
