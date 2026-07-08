@@ -29,6 +29,24 @@ This is `gitgrab`, a CLI utility written in Go that clones all GitHub repositori
 - Tests use `httptest.NewRecorder()` for mock HTTP responses
 - Current test coverage: ~70%
 
+### Security fuzz tests (`fuzz_test.go`)
+
+Native Go fuzz targets cover the untrusted-input boundaries and assert security
+invariants (path containment, no argument/command injection, safe URL/name
+handling, robust JSON decoding). They run in two tiers:
+
+- **Lightweight (CI)**: `task fuzz-ci` runs a short, time-bounded burst per
+  target (`FUZZTIME` default `15s`) and is wired into the `fuzz` job in
+  `.github/workflows/ci.yml`. The seed corpora also run as normal tests under
+  `task test`.
+- **Heavyweight (ad hoc)**: `task fuzz` runs each target for a long duration
+  (`FUZZTIME` default `5m`, e.g. `task fuzz FUZZTIME=30m`) on a developer
+  machine.
+
+Both tiers loop over every `Fuzz*` function automatically (targets are
+discovered by grep in the `fuzz-run` internal task), since `go test -fuzz`
+only fuzzes one target per invocation.
+
 ## Development Commands
 
 **Build the application (preferred method):**
@@ -68,6 +86,13 @@ task coverage
 **Run specific test:**
 ```bash
 go test . -run TestName
+```
+
+**Run fuzz tests:**
+```bash
+task fuzz-ci              # Lightweight, time-bounded (CI tier)
+task fuzz                 # Heavyweight ad hoc (defaults to 5m per target)
+task fuzz FUZZTIME=30m    # Override per-target duration
 ```
 
 **Security and code quality checks:**

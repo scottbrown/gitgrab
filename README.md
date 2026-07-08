@@ -54,6 +54,28 @@ task build
 # The binary will be created at .build/gitgrab
 ```
 
+## Security fuzz testing
+
+GitGrab is fuzz-tested at its untrusted-input boundaries (the clone-method
+flag, GitHub-supplied repository/organization names and URLs, path resolution,
+clone-URL construction, and API JSON decoding) to guard against path traversal
+and command/argument injection. The fuzz targets live in `fuzz_test.go` and
+come in two tiers:
+
+```bash
+# Lightweight, time-bounded burst — runs in CI on every push/PR
+task fuzz-ci
+
+# Heavyweight ad hoc run on a developer machine (defaults to 5m per target)
+task fuzz
+
+# Override the per-target duration
+task fuzz FUZZTIME=30m
+```
+
+The seed corpora also execute as ordinary unit tests during `task test`, so the
+malicious inputs are checked on every test run even without a fuzzing pass.
+
 ## Requirements
 
 - Go 1.24+
