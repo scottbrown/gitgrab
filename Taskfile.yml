@@ -56,6 +56,31 @@ tasks:
     cmds:
       - go test ./... -cover
 
+  fuzz-ci:
+    desc: "Lightweight, time-bounded fuzzing for CI (short burst per target)"
+    cmds:
+      - task: fuzz-run
+        vars: { FUZZTIME: "{{.FUZZTIME | default \"15s\"}}" }
+
+  fuzz:
+    desc: "Heavyweight ad hoc fuzzing (override duration with FUZZTIME, e.g. FUZZTIME=5m)"
+    cmds:
+      - task: fuzz-run
+        vars: { FUZZTIME: "{{.FUZZTIME | default \"5m\"}}" }
+
+  fuzz-run:
+    internal: true
+    desc: "Runs every Fuzz* target for FUZZTIME each (go fuzz allows one target per run)"
+    vars:
+      FUZZTIME: '{{.FUZZTIME | default "15s"}}'
+      TARGETS:
+        sh: grep -rhoE '^func (Fuzz[A-Za-z0-9_]+)' *.go | awk '{print $2}'
+    cmds:
+      - for: { var: TARGETS }
+        cmd: |
+          echo "==> Fuzzing {{.ITEM}} for {{.FUZZTIME}}"
+          go test -run '^$' -fuzz '^{{.ITEM}}$' -fuzztime={{.FUZZTIME}} .
+
   check:
     desc: "Run all security scans"
     deps: [ sast, vet, vuln ]

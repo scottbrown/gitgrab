@@ -1,6 +1,7 @@
 package gitgrab
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"unicode"
 )
 
 // CloneMethod represents the method used to clone repositories
@@ -60,7 +62,7 @@ func (u HTTPURL) String() string {
 }
 
 func (u HTTPURL) IsValid() bool {
-	return strings.HasPrefix(string(u), "https://")
+	return strings.HasPrefix(string(u), "https://") && isSafeURL(string(u))
 }
 
 func (u SSHURL) String() string {
@@ -68,7 +70,25 @@ func (u SSHURL) String() string {
 }
 
 func (u SSHURL) IsValid() bool {
-	return strings.HasPrefix(string(u), "git@")
+	return strings.HasPrefix(string(u), "git@") && isSafeURL(string(u))
+}
+
+// isSafeURL reports whether a URL is safe to hand to `git clone` as a
+// positional argument. It rejects the empty string, any leading '-' (which git
+// would interpret as an option), and any embedded whitespace or control
+// characters that could split or corrupt the command. This does not attempt
+// full URL validation — it is a defensive guard against argument injection via
+// hostile GitHub API responses.
+func isSafeURL(s string) bool {
+	if s == "" || strings.HasPrefix(s, "-") {
+		return false
+	}
+	for _, r := range s {
+		if r == unicode.ReplacementChar || unicode.IsSpace(r) || unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
 }
 
 // GitHubToken represents a GitHub authentication token
@@ -93,9 +113,13 @@ func (o OrganizationName) String() string {
 	return string(o)
 }
 
+// IsValid reports whether the organization name is safe to interpolate into a
+// URL path. GitHub logins are limited to alphanumerics and single hyphens, and
+// may not begin or end with a hyphen. Anything else (path separators, spaces,
+// URL/shell metacharacters, control characters) is rejected so a hostile API
+// response or flag value cannot smuggle in traversal or injection payloads.
 func (o OrganizationName) IsValid() bool {
-	s := string(o)
-	return len(s) > 0 && !strings.ContainsAny(s, " /\\")
+	return isSafeName(string(o), false)
 }
 
 // RepositoryName represents a repository name
@@ -105,9 +129,44 @@ func (r RepositoryName) String() string {
 	return string(r)
 }
 
+// IsValid reports whether the repository name is safe to use as a single path
+// component and to interpolate into a clone URL. GitHub repository names allow
+// alphanumerics plus '-', '_', and '.', but the names "." and ".." are
+// rejected because they would escape the target directory when joined into a
+// path. Path separators, spaces, and other metacharacters are also rejected.
 func (r RepositoryName) IsValid() bool {
 	s := string(r)
-	return len(s) > 0 && !strings.ContainsAny(s, " /\\")
+	if s == "." || s == ".." {
+		return false
+	}
+	return isSafeName(s, true)
+}
+
+// isSafeName is the shared allowlist check for GitHub-style identifiers used in
+// paths and URLs. When allowExtra is true the characters '_' and '.' are also
+// permitted (repository names), otherwise only alphanumerics and '-' are
+// allowed (organization logins). A leading or trailing '-' is always rejected,
+// matching GitHub's own rules and avoiding names that could be parsed as CLI
+// flags. The empty string is never valid.
+func isSafeName(s string, allowExtra bool) bool {
+	if s == "" {
+		return false
+	}
+	if strings.HasPrefix(s, "-") || strings.HasSuffix(s, "-") {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '-':
+		case allowExtra && (r == '_' || r == '.'):
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // BranchName represents a git branch name
@@ -194,8 +253,13 @@ func (gc *GitHubClient) FetchAllRepos(orgName OrganizationName) ([]Repository, e
 			return nil, fmt.Errorf("API request failed: %s - %s", resp.Status, string(body))
 		}
 
-		var repos []Repository
-		if err := json.NewDecoder(resp.Body).Decode(&repos); err != nil {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response: %v", err)
+		}
+
+		repos, err := parseRepos(body)
+		if err != nil {
 			return nil, fmt.Errorf("failed to decode response: %v", err)
 		}
 
@@ -210,6 +274,91 @@ func (gc *GitHubClient) FetchAllRepos(orgName OrganizationName) ([]Repository, e
 	return allRepos, nil
 }
 
+// parseRepos decodes a single page of the GitHub "list org repos" response.
+// It is separated from FetchAllRepos so the JSON decoding path can be
+// fuzzed against hostile or malformed API responses without any network I/O.
+// Decoding is strict: unexpected trailing data after the JSON array is
+// rejected rather than silently ignored.
+func parseRepos(data []byte) ([]Repository, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	var repos []Repository
+	if err := dec.Decode(&repos); err != nil {
+		return nil, err
+	}
+	if dec.More() {
+		return nil, fmt.Errorf("unexpected trailing data after JSON array")
+	}
+	return repos, nil
+}
+
+// resolveRepoPath joins a repository name onto the target directory, returning
+// an error if the repository name is not a safe single path component or if the
+// result would escape targetDir (path traversal). It is the single choke point
+// for turning an untrusted repository name into a filesystem path, and is pure
+// so it can be fuzzed directly.
+func resolveRepoPath(targetDir string, name RepositoryName) (string, error) {
+	if !name.IsValid() {
+		return "", fmt.Errorf("invalid repository name: %q", name.String())
+	}
+
+	repoPath := filepath.Join(targetDir, name.String())
+
+	// Defense in depth: even though IsValid already forbids separators and
+	// "..", confirm the joined path stays directly within targetDir.
+	cleanTarget := filepath.Clean(targetDir)
+	if parent := filepath.Dir(repoPath); parent != cleanTarget {
+		return "", fmt.Errorf("repository path escapes target directory: %q", repoPath)
+	}
+
+	return repoPath, nil
+}
+
+// buildCloneURL determines the git clone URL for a repository based on the
+// chosen clone method, validating every component that originates from
+// untrusted input (the GitHub API response and CLI flags). It never embeds a
+// value that would be interpreted by git as an option or that contains
+// command-splitting characters. It is pure so it can be fuzzed directly.
+func buildCloneURL(config CloneConfig) (string, error) {
+	repo := config.Repository
+
+	if config.Method == CloneMethodSSH {
+		if !repo.SSHURL.IsValid() {
+			return "", fmt.Errorf("invalid ssh url for %q", repo.Name.String())
+		}
+		return repo.SSHURL.String(), nil
+	}
+
+	// HTTP method.
+	if !repo.Private {
+		if !repo.CloneURL.IsValid() {
+			return "", fmt.Errorf("invalid clone url for %q", repo.Name.String())
+		}
+		return repo.CloneURL.String(), nil
+	}
+
+	// Private repo over HTTP: build a token-authenticated URL from validated
+	// components so a hostile name/org cannot inject into the URL or command.
+	if !config.Organization.IsValid() {
+		return "", fmt.Errorf("invalid organization name: %q", config.Organization.String())
+	}
+	if !repo.Name.IsValid() {
+		return "", fmt.Errorf("invalid repository name: %q", repo.Name.String())
+	}
+	if config.Token.IsEmpty() {
+		return "", fmt.Errorf("token required for private repository over http")
+	}
+	if !isSafeURL(config.Token.String()) {
+		return "", fmt.Errorf("token contains invalid characters")
+	}
+
+	url := fmt.Sprintf("https://%s@github.com/%s/%s.git",
+		config.Token, config.Organization, repo.Name)
+	if !isSafeURL(url) {
+		return "", fmt.Errorf("constructed clone url is invalid")
+	}
+	return url, nil
+}
+
 func getCurrentBranch(repoPath string) (string, error) {
 	cmd := exec.Command("git", "-C", repoPath, "branch", "--show-current")
 	output, err := cmd.Output()
@@ -221,8 +370,13 @@ func getCurrentBranch(repoPath string) (string, error) {
 }
 
 func CloneRepo(config CloneConfig) error {
-	repoPath := filepath.Join(config.TargetDir, config.Repository.Name.String())
-	
+	// Validate the repository name and resolve it to a contained path before
+	// it is ever used as a filesystem path or passed to git.
+	repoPath, err := resolveRepoPath(config.TargetDir, config.Repository.Name)
+	if err != nil {
+		return fmt.Errorf("failed to clone %s: %v", config.Repository.Name, err)
+	}
+
 	// Check if directory already exists
 	if _, err := os.Stat(repoPath); err == nil {
 		fmt.Printf("  Directory %s already exists, updating...\n", config.Repository.Name)
@@ -285,20 +439,15 @@ func CloneRepo(config CloneConfig) error {
 		return nil
 	}
 
-	// Prepare clone URL based on clone method
-	var cloneURL string
-	if config.Method == CloneMethodSSH {
-		cloneURL = config.Repository.SSHURL.String()
-	} else {
-		if config.Repository.Private {
-			cloneURL = fmt.Sprintf("https://%s@github.com/%s/%s.git", config.Token, config.Organization, config.Repository.Name)
-		} else {
-			cloneURL = config.Repository.CloneURL.String()
-		}
+	// Prepare and validate the clone URL based on clone method.
+	cloneURL, err := buildCloneURL(config)
+	if err != nil {
+		return fmt.Errorf("failed to clone %s: %v", config.Repository.Name, err)
 	}
 
-	// Execute git clone
-	cmd := exec.Command("git", "clone", cloneURL, repoPath)
+	// Execute git clone. The "--" separator prevents a URL or path that begins
+	// with "-" from being interpreted by git as an option (argument injection).
+	cmd := exec.Command("git", "clone", "--", cloneURL, repoPath)
 	cmd.Stdout = nil // Suppress output
 	cmd.Stderr = nil // Suppress error output
 
