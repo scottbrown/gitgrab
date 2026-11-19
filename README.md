@@ -78,7 +78,7 @@ malicious inputs are checked on every test run even without a fuzzing pass.
 
 ## Requirements
 
-- Go 1.24+
+- Go 1.27.4+
 - Git installed and available in PATH
 - GitHub personal access token with appropriate repository permissions
 
